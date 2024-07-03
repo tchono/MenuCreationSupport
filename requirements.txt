@@ -3,3 +3,5 @@ streamlit_calendar
 plotly
 pulp
 jpholiday
+matplotlib
+japanize-matplotlib
