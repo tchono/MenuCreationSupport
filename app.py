@@ -140,7 +140,7 @@ def view_mockup():
             temp_df = st.session_state['df'].copy()
             temp_df = temp_df.sort_values(by=["日付", "食_区分CD"])
 
-            option = st.radio('表示する献立を選択', ['朝', '昼', '夕'])
+            option = st.radio('表示する献立を選択', ['朝', '昼', '夕'], horizontal=True)
             events = []
             second_offset = 0
             current_date = temp_df["日付"][0]
@@ -206,7 +206,6 @@ def view_mockup():
                     target_nutrition[labels_en[i]] = tuple(a)
 
                 st.session_state['df'] = create_menu.create(df, st.session_state['df'], date, target_nutrition, option)
-                st.write(st.session_state['df'])
 
             st.markdown("---")
 
@@ -226,10 +225,11 @@ def view_mockup():
 
             st.markdown("---")
 
-            st.markdown("## グラフ表示する値")
+            st.markdown("## グラフ表示")
 
-            option2 = st.radio('', labels_en)
-            values = st.session_state['df'].copy().groupby("日付")[option2].sum()
+            option2 = st.radio('', labels, horizontal=True)
+            selected_option_en = labels_en[labels.index(option2)]
+            values = st.session_state['df'].copy().groupby("日付")[selected_option_en].sum()
             st.line_chart(values)
 
             # Create a CSV buffer with CP932 encoding
