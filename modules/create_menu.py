@@ -26,6 +26,8 @@ df_melted = pd.DataFrame(data)
 
 columns = ['Ryori_正規化後', '食_区分CD', '区分', '料理_区分CD', '料理_区分', 'Kashokuryo', 'Energy', 'Protein', 'Fat', 'Carbohydrate', 'Calcium', 'Potassium', 'DietaryFiber', 'Sodium', 'TotalCost']
 
+columns_to_sum = ['Kashokuryo', 'Energy', 'Protein', 'Fat', 'Carbohydrate', 'Potassium', 'Calcium', 'DietaryFiber', 'Sodium', 'TotalCost']
+
 def create_dates_with_weekday_and_holiday(year, month, base_weekday):
     start_date = datetime.date(year, month, 1)
     next_month = month % 12 + 1
@@ -150,8 +152,6 @@ def set_initial_values(year, month, ryori_list, ryori, target_nutrition):
 
     milk = df_recipes_data[(df_recipes_data['Ryori_正規化後'] == '牛乳200cc') & (df_recipes_data['Kashokuryo'] == 200)][columns].values[0]
     df_monthly_menu.loc[(df_monthly_menu['カテゴリ'] == '乳製品') & (df_monthly_menu["Ryori_正規化後"] == ''), columns] = milk
-
-    columns_to_sum = ['Kashokuryo', 'Energy', 'Protein', 'Fat', 'Carbohydrate', 'Potassium', 'Calcium', 'DietaryFiber', 'Sodium', 'TotalCost']
 
     # 合計する列に文字列が混ざってる場合は数値に変換
     for column in columns_to_sum:
@@ -397,23 +397,27 @@ def optimize_meal_plan(total_per_date, df_monthly_menu, target_nutrition, total_
         formatted_day = row['日付'].strftime('%Y-%m-%d')
         categories = df_monthly_menu[(df_monthly_menu['日付']==formatted_day) & (df_monthly_menu['食事']==meal_type) & (df_monthly_menu['Ryori_正規化後']=='')]['カテゴリ'].tolist()
         if categories == []:
-            break
-        print(formatted_day)
+            continue
         total_per_date_shoku_day = total_per_date_shoku[(total_per_date_shoku['日付']==formatted_day) & (total_per_date_shoku['食事']==meal_type)].iloc[0]
 
-        tn = adjust_target_nutrition(target_nutrition, total_per_date_shoku_day, 3)
+        if meal_type == '昼':
+            tn = adjust_target_nutrition(target_nutrition, total_per_date_shoku_day, 2)
+        else:
+            tn = adjust_target_nutrition(target_nutrition, total_per_date_shoku_day, 4)
 
         max_attempts =5
         attempts = 0
         while attempts < max_attempts:
             try:
-                temp_df = get_ryori_df(categories, 100)
+                temp_df = get_ryori_df(categories, 50)
                 selected_recipes_df = get_meal_plan_optimization_df(temp_df, categories, tn)
                 break
             except:
                 attempts += 1
-                if attempts <= 3:
-                    tn = adjust_target_nutrition(target_nutrition, total_per_date_shoku_day, 3, 1 - attempts * 0.1)
+                if meal_type == '昼':
+                    tn = adjust_target_nutrition(target_nutrition, total_per_date_shoku_day, 2, attempts * 0.1)
+                else:
+                    tn = adjust_target_nutrition(target_nutrition, total_per_date_shoku_day, 4, attempts * 0.1)
                 print(f"Attempt {attempts} failed. Retrying...")
 
         if max_attempts == attempts:
@@ -443,34 +447,39 @@ def adjust_target_nutrition(target_nutrition, total_per_date_shoku, serving_size
 
     for key in tn.keys():
         if tn[key][0] is not None:
-            tn[key] = (tn[key][0] - total_per_date_shoku[key], tn[key][1])
+            b = tn[key][0] - total_per_date_shoku[key]
+            if b > 0:
+                tn[key] = (b, tn[key][1])
+            else:
+                tn[key] = (None, tn[key][1])
         if tn[key][1] is not None:
-            tn[key] = (tn[key][0], tn[key][1] - total_per_date_shoku[key])
+            # 料理によって、塩分が超える場合あり
+            c = tn[key][1] - total_per_date_shoku[key]
+            if c <= 2:
+                c = 2
+
+            tn[key] = (tn[key][0], c)
     return tn
 
 """## 献立生成"""
-def create():
-    # 目標原価率
-    target_cost_rate = 0.602
+# set_initial_values(year, month, ryori_list, ryori, target_nutrition)
+def create(ryori_list, df_monthly_menu, date, target_nutrition, meal_type):
+    global df_ayame_ryori_list
+    df_ayame_ryori_list = ryori_list
+
+    date = datetime.combine(date, datetime.min.time())
 
     df_monthly_menu_temp = df_monthly_menu.copy()
 
-    meal_type = '昼'
-    df_monthly_menu_temp = optimize_meal_plan(total_per_date, df_monthly_menu_temp, target_nutrition, total_per_date_shoku, meal_type)
+    df_monthly_menu_temp.loc[(df_monthly_menu_temp['日付'] == date) & (df_monthly_menu_temp['食事'] == meal_type) & (~df_monthly_menu_temp['カテゴリ'].isin(['主食', '乳製品', '汁物'])), columns] = 0
+    df_monthly_menu_temp.loc[(df_monthly_menu_temp['日付'] == date) & (df_monthly_menu_temp['食事'] == meal_type) & (~df_monthly_menu_temp['カテゴリ'].isin(['主食', '乳製品', '汁物'])), ['Ryori_正規化後']] = ''
 
-    meal_type = '朝'
-    df_monthly_menu_temp = optimize_meal_plan(total_per_date, df_monthly_menu_temp, target_nutrition, total_per_date_shoku, meal_type)
+    # グループ化して合計
+    total_per_date = df_monthly_menu_temp.groupby('日付')[columns_to_sum].sum().reset_index()
+    total_per_date = total_per_date[total_per_date['日付'] == date]
+    total_per_date_shoku = df_monthly_menu_temp.groupby(['日付', '食事'])[columns_to_sum].sum().reset_index()
+    total_per_date_shoku = total_per_date_shoku[total_per_date_shoku['日付'] == date]
 
-    meal_type = '夕'
-    df_monthly_menu_temp = optimize_meal_plan(total_per_date, df_monthly_menu_temp, target_nutrition, total_per_date_shoku, meal_type)
-
-    meal_type = '昼'
-    df_monthly_menu_temp = optimize_meal_plan(total_per_date, df_monthly_menu_temp, target_nutrition, total_per_date_shoku, meal_type)
-
-    meal_type = '朝'
-    df_monthly_menu_temp = optimize_meal_plan(total_per_date, df_monthly_menu_temp, target_nutrition, total_per_date_shoku, meal_type)
-
-    meal_type = '夕'
     df_monthly_menu_temp = optimize_meal_plan(total_per_date, df_monthly_menu_temp, target_nutrition, total_per_date_shoku, meal_type)
 
     return df_monthly_menu_temp

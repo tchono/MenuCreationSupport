@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import japanize_matplotlib
 import math
 from datetime import datetime, timedelta
 import streamlit_calendar as st_calendar
 import csv
 import io
+import calendar
 
 ### 自作のモジュールをインポートする ###
 from modules import create_menu
@@ -174,8 +176,61 @@ def view_mockup():
                 "editable": True,
                 "selectable": True,
                 "events": events,
-    }
+                }
             st_calendar.calendar(options=calendar_options)
+
+            _, last_day = calendar.monthrange(st.session_state['year'], st.session_state['month'])
+            date = st.date_input(
+                "再作成する日付を選択してください",
+                value=datetime(year, month, 1),
+                min_value=datetime(st.session_state['year'], st.session_state['month'], 1),
+                max_value=datetime(st.session_state['year'], st.session_state['month'], last_day)
+            )
+
+            button_pressed2 = st.button('✔単日再作成')
+            if button_pressed2:
+                target_nutrition = {
+                    "Energy": (None, None),
+                    "Protein": (None, None),
+                    "Fat": (None, None),
+                    "Sodium": (None, None),
+                    "TotalCost": (None, None)
+                }
+
+                for i, label in enumerate(labels):
+                    a = [None, None]
+                    if goal_data[i][0] != min_values[i]:
+                        a[0] = goal_data[i][0]
+                    if goal_data[i][1] != max_values[i]:
+                        a[1] = goal_data[i][1]
+                    target_nutrition[labels_en[i]] = tuple(a)
+
+                st.session_state['df'] = create_menu.create(df, st.session_state['df'], date, target_nutrition, option)
+                st.write(st.session_state['df'])
+
+            st.markdown("---")
+
+            average_values = st.session_state['df'].copy().groupby("日付")[labels_en].sum().mean()
+
+            st.markdown("## 1か月の平均値")
+            columns = st.columns(len(labels_en))
+
+            for i, label in enumerate(labels_en):
+                with columns[i]:
+                    st.markdown(f"""
+        <div style="border: 1px solid #e1e1e1; padding: 10px; border-radius: 5px;">
+            <p style="margin: 0; font-weight: bold;">{labels[i]}</p>
+            <p style="margin: 0;">{average_values[label]:.2f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            st.markdown("## グラフ表示する値")
+
+            option2 = st.radio('', labels_en)
+            values = st.session_state['df'].copy().groupby("日付")[option2].sum()
+            st.line_chart(values)
 
             # Create a CSV buffer with CP932 encoding
             csv_buffer = io.StringIO(newline='')
