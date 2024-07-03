@@ -1,0 +1,5 @@
+streamlit
+streamlit_calendar
+plotly
+pulp
+jpholiday
