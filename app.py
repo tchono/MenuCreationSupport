@@ -98,7 +98,7 @@ def view_mockup():
     num_cols = len(labels)
     min_values = [0, 0, 0, 0, 0]
     max_values = [2000, 100, 100, 50, 1000]
-    initial_values = [(1600, 1800), (60, 100), (0, 100), (0, 8), (0, 500)]
+    initial_values = [(1600, 1650), (60, 100), (0, 100), (0, 8), (500, 700)]
     colsA = st.columns(num_cols)
     goal_data = [0] * num_cols
 
